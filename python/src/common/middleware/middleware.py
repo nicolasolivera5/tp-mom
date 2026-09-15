@@ -28,7 +28,7 @@ class MessageMiddleware(ABC):
 	
 	#Si se estaba consumiendo desde la cola/exchange, se detiene la escucha. Si
 	#no se estaba consumiendo de la cola/exchange, no tiene efecto, ni levanta
-	#Si se pierde la conexión con el middleware eleva MessageMiddlewareDisconnectedError.
+	#Si se pierde la conexión con el midleware eleva MessageMiddlewareDisconnectedError.
 	@abstractmethod
 	def stop_consuming(self):
 		pass
@@ -52,7 +52,51 @@ class MessageMiddlewareExchange(MessageMiddleware):
 	def __init__(self, host, exchange_name, routing_keys):
 		pass
 
+	def start_consuming(self, on_message_callback):
+
+		try:
+			connection = pika.BlockingConnection(pika.ConnectionParameters(host=host))
+			channel = connection.channel()
+
+			channel = exchange_declare(exchange=exchange_name, exchange_type='topic', durable=True)
+
+			result = channel.queue_declare(queue='', durable=True)
+			queue_name = result.method.queue
+
+			for routing_key in routing_keys:
+				channel.queue_bind(exchange=exchange_name, queue=queue_name, routing_key=routing_key)
+
+			on_message_callback(message, ack, nack)
+
+			channel.basic_consume(queue=queue_name, on_message_callback=on_message_callback)
+			channel.start_consuming()
+		
+		except pika.exceptions.AMQPConnectionError as e:
+			raise MessageMiddlewareDisconnectedError(f"Error connecting to message broker: {str(e)}")
+		except Exception as e:
+			raise MessageMiddlewareMessageError(f"Error consuming message: {str(e)}")
+
+
 class MessageMiddlewareQueue(MessageMiddleware):
 	@abstractmethod
 	def __init__(self, host, queue_name):
 		pass
+
+	def start_consuming(self, on_message_callback):
+
+		try:
+			connection = pika.BlockingConnection(pika.ConnectionParameters(host=host))
+			channel = connection.channel()
+
+			channel.queue_declare(queue=queue_name, durable=True)
+
+			on_message_callback(message, ack, nack)
+
+			channel.basic_consume(queue=queue_name, on_message_callback=on_message_callback)
+			channel.start_consuming()
+
+		except pika.exceptions.AMQPConnectionError as e:
+			raise MessageMiddlewareDisconnectedError(f"Error connecting to message broker: {str(e)}")
+		except Exception as e:
+			raise MessageMiddlewareMessageError(f"Error consuming message: {str(e)}")
+			

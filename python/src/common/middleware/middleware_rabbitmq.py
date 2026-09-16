@@ -8,15 +8,17 @@ class MessageMiddlewareQueueRabbitMQ(MessageMiddlewareQueue):
     def __init__(self, host, queue_name):
         self.host = host
         self.queue_name = queue_name
-        self.connection = None
-        self.channel = None
-
-    def start_consuming(self, on_message_callback):
         try:
             self.connection = pika.BlockingConnection(pika.ConnectionParameters(host=self.host))
             self.channel = self.connection.channel()
             self.channel.queue_declare(queue=self.queue_name, durable=True)
+        except pika.exceptions.AMQPConnectionError as e:
+            raise MessageMiddlewareDisconnectedError(f"Error connecting to message broker: {str(e)}")
+        except Exception as e:
+            raise MessageMiddlewareMessageError(f"Error consuming message: {str(e)}")
 
+    def start_consuming(self, on_message_callback):
+        try:
             def callback(ch, method, properties, body):
                 ack = lambda: ch.basic_ack(delivery_tag=method.delivery_tag)
                 nack = lambda: ch.basic_nack(delivery_tag=method.delivery_tag)
@@ -24,7 +26,6 @@ class MessageMiddlewareQueueRabbitMQ(MessageMiddlewareQueue):
 
             self.channel.basic_consume(queue=self.queue_name, on_message_callback=callback)
             self.channel.start_consuming()
-
         except pika.exceptions.AMQPConnectionError as e:
             raise MessageMiddlewareDisconnectedError(f"Error connecting to message broker: {str(e)}")
         except Exception as e:
@@ -67,16 +68,17 @@ class MessageMiddlewareExchangeRabbitMQ(MessageMiddlewareExchange):
         self.host = host
         self.exchange_name = exchange_name
         self.routing_keys = routing_keys
-        self.connection = None
-        self.channel = None
-
-    def start_consuming(self, on_message_callback):
         try:
             self.connection = pika.BlockingConnection(pika.ConnectionParameters(host=self.host))
             self.channel = self.connection.channel()
-
             self.channel.exchange_declare(exchange=self.exchange_name, exchange_type='topic', durable=True)
-
+        except pika.exceptions.AMQPConnectionError as e:
+            raise MessageMiddlewareDisconnectedError(f"Error connecting to message broker: {str(e)}")
+        except Exception as e:
+            raise MessageMiddlewareMessageError(f"Error consuming message: {str(e)}")
+        
+    def start_consuming(self, on_message_callback):
+        try:
             result = self.channel.queue_declare(queue='', durable=True, exclusive=True)
             queue_name = result.method.queue
 
@@ -89,8 +91,7 @@ class MessageMiddlewareExchangeRabbitMQ(MessageMiddlewareExchange):
                 on_message_callback(body, ack, nack)
 
             self.channel.basic_consume(queue=queue_name, on_message_callback=callback)
-            self.channel.start_consuming()
-        
+            self.channel.start_consuming()    
         except pika.exceptions.AMQPConnectionError as e:
             raise MessageMiddlewareDisconnectedError(f"Error connecting to message broker: {str(e)}")
         except Exception as e:
@@ -113,7 +114,6 @@ class MessageMiddlewareExchangeRabbitMQ(MessageMiddlewareExchange):
 
             for routing_key in self.routing_keys:
                 self.channel.basic_publish(exchange=self.exchange_name, routing_key=routing_key, body=message)
-
         except pika.exceptions.AMQPConnectionError as e:
             raise MessageMiddlewareDisconnectedError(f"Error connecting to message broker: {str(e)}")
         except Exception as e:

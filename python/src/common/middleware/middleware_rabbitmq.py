@@ -12,11 +12,9 @@ class MessageMiddlewareQueueRabbitMQ(MessageMiddlewareQueue):
         self.channel = None
 
     def start_consuming(self, on_message_callback):
-
         try:
             self.connection = pika.BlockingConnection(pika.ConnectionParameters(host=self.host))
             self.channel = self.connection.channel()
-
             self.channel.queue_declare(queue=self.queue_name, durable=True)
 
             def callback(ch, method, properties, body):
@@ -33,7 +31,6 @@ class MessageMiddlewareQueueRabbitMQ(MessageMiddlewareQueue):
             raise MessageMiddlewareMessageError(f"Error consuming message: {str(e)}")
 
     def stop_consuming(self):
-
         try:
             if self.channel is not None and self.channel.is_open:
                 self.channel.stop_consuming()
@@ -41,12 +38,11 @@ class MessageMiddlewareQueueRabbitMQ(MessageMiddlewareQueue):
             raise MessageMiddlewareDisconnectedError(f"Error disconnecting from message broker: {str(e)}")
 
     def send(self, message):
-
         try:
-            if self.channel is None or not self.channel.is_open:
+            if (self.connection is None or self.connection.is_closed or 
+                self.channel is None or self.channel.is_closed):
                 self.connection = pika.BlockingConnection(pika.ConnectionParameters(host=self.host))
                 self.channel = self.connection.channel()
-
                 self.channel.queue_declare(queue=self.queue_name, durable=True)
 
             self.channel.basic_publish(exchange='', routing_key=self.queue_name, body=message)
@@ -75,18 +71,17 @@ class MessageMiddlewareExchangeRabbitMQ(MessageMiddlewareExchange):
         self.channel = None
 
     def start_consuming(self, on_message_callback):
-
         try:
             self.connection = pika.BlockingConnection(pika.ConnectionParameters(host=self.host))
             self.channel = self.connection.channel()
 
-            self.channel = exchange_declare(exchange=self.exchange_name, exchange_type='topic', durable=True)
+            self.channel.exchange_declare(exchange=self.exchange_name, exchange_type='topic', durable=True)
 
-            result = self.channel.queue_declare(queue='', durable=True)
+            result = self.channel.queue_declare(queue='', durable=True, exclusive=True)
             queue_name = result.method.queue
 
             for routing_key in self.routing_keys:
-                self.channel.queue_bind(exchange=self.exchange_name, queue=self.queue_name, routing_key=routing_key)
+                self.channel.queue_bind(exchange=self.exchange_name, queue=queue_name, routing_key=routing_key)
 
             def callback(ch, method, properties, body):
                 ack = lambda: ch.basic_ack(delivery_tag=method.delivery_tag)
@@ -95,14 +90,13 @@ class MessageMiddlewareExchangeRabbitMQ(MessageMiddlewareExchange):
 
             self.channel.basic_consume(queue=queue_name, on_message_callback=callback)
             self.channel.start_consuming()
-		
+        
         except pika.exceptions.AMQPConnectionError as e:
             raise MessageMiddlewareDisconnectedError(f"Error connecting to message broker: {str(e)}")
         except Exception as e:
             raise MessageMiddlewareMessageError(f"Error consuming message: {str(e)}")
 
     def stop_consuming(self):
-
         try:
             if self.channel is not None and self.channel.is_open:
                 self.channel.stop_consuming()
@@ -110,12 +104,11 @@ class MessageMiddlewareExchangeRabbitMQ(MessageMiddlewareExchange):
             raise MessageMiddlewareDisconnectedError(f"Error disconnecting from message broker: {str(e)}")
 
     def send(self, message):
-
         try:
-            if self.channel is None or not self.channel.is_open:
+            if (self.connection is None or self.connection.is_closed or 
+                self.channel is None or self.channel.is_closed):
                 self.connection = pika.BlockingConnection(pika.ConnectionParameters(host=self.host))
                 self.channel = self.connection.channel()
-
                 self.channel.exchange_declare(exchange=self.exchange_name, exchange_type='topic', durable=True)
 
             for routing_key in self.routing_keys:
@@ -125,7 +118,7 @@ class MessageMiddlewareExchangeRabbitMQ(MessageMiddlewareExchange):
             raise MessageMiddlewareDisconnectedError(f"Error connecting to message broker: {str(e)}")
         except Exception as e:
             raise MessageMiddlewareMessageError(f"Error sending message: {str(e)}")
-    
+
     def close(self):
         try:
             if self.channel is not None and self.channel.is_open:
@@ -134,12 +127,3 @@ class MessageMiddlewareExchangeRabbitMQ(MessageMiddlewareExchange):
                 self.connection.close()
         except Exception as e:
             raise MessageMiddlewareCloseError(f"Error closing connection: {str(e)}")
-
-    
-
-
-    
-
-    
-
-

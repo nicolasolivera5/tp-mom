@@ -1,7 +1,7 @@
 import pika
 import random
 import string
-from .middleware import MessageMiddlewareQueue, MessageMiddlewareExchange
+from .middleware import MessageMiddlewareQueue, MessageMiddlewareExchange, MessageMiddlewareDisconnectedError, MessageMiddlewareMessageError, MessageMiddlewareCloseError
 
 class MessageMiddlewareQueueRabbitMQ(MessageMiddlewareQueue):
 
@@ -19,9 +19,12 @@ class MessageMiddlewareQueueRabbitMQ(MessageMiddlewareQueue):
 
             self.channel.queue_declare(queue=self.queue_name, durable=True)
 
-            on_message_callback(message, ack, nack)
+            def callback(ch, method, properties, body):
+                ack = lambda: ch.basic_ack(delivery_tag=method.delivery_tag)
+                nack = lambda: ch.basic_nack(delivery_tag=method.delivery_tag)
+                on_message_callback(body, ack, nack)
 
-            self.channel.basic_consume(queue=self.queue_name, on_message_callback=on_message_callback)
+            self.channel.basic_consume(queue=self.queue_name, on_message_callback=callback)
             self.channel.start_consuming()
 
         except pika.exceptions.AMQPConnectionError as e:
@@ -85,9 +88,12 @@ class MessageMiddlewareExchangeRabbitMQ(MessageMiddlewareExchange):
             for routing_key in self.routing_keys:
                 self.channel.queue_bind(exchange=self.exchange_name, queue=self.queue_name, routing_key=routing_key)
 
-            on_message_callback(message, ack, nack)
+            def callback(ch, method, properties, body):
+                ack = lambda: ch.basic_ack(delivery_tag=method.delivery_tag)
+                nack = lambda: ch.basic_nack(delivery_tag=method.delivery_tag)
+                on_message_callback(body, ack, nack)
 
-            self.channel.basic_consume(queue=self.queue_name, on_message_callback=on_message_callback)
+            self.channel.basic_consume(queue=queue_name, on_message_callback=callback)
             self.channel.start_consuming()
 		
         except pika.exceptions.AMQPConnectionError as e:

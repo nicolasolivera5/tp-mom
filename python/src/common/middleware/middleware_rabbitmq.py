@@ -52,6 +52,14 @@ class MessageMiddlewareQueueRabbitMQ(MessageMiddlewareQueue):
         except Exception as e:
             raise MessageMiddlewareMessageError(f"Error sending message: {str(e)}")
 
+    def close(self):
+        try:
+            if self.channel is not None and self.channel.is_open:
+                self.channel.close()
+            if self.connection is not None and self.connection.is_open:
+                self.connection.close()
+        except Exception as e:
+            raise MessageMiddlewareCloseError(f"Error closing connection: {str(e)}")
 
 
 class MessageMiddlewareExchangeRabbitMQ(MessageMiddlewareExchange):
@@ -111,6 +119,17 @@ class MessageMiddlewareExchangeRabbitMQ(MessageMiddlewareExchange):
             raise MessageMiddlewareDisconnectedError(f"Error connecting to message broker: {str(e)}")
         except Exception as e:
             raise MessageMiddlewareMessageError(f"Error sending message: {str(e)}")
+    
+    def close(self):
+        try:
+            if self.channel is not None and self.channel.is_open:
+                self.channel.close()
+            if self.connection is not None and self.connection.is_open:
+                self.connection.close()
+        except Exception as e:
+            raise MessageMiddlewareCloseError(f"Error closing connection: {str(e)}")
+
+    
 
 
     

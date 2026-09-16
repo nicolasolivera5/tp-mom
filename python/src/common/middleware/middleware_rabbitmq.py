@@ -40,12 +40,6 @@ class MessageMiddlewareQueueRabbitMQ(MessageMiddlewareQueue):
 
     def send(self, message):
         try:
-            if (self.connection is None or self.connection.is_closed or 
-                self.channel is None or self.channel.is_closed):
-                self.connection = pika.BlockingConnection(pika.ConnectionParameters(host=self.host))
-                self.channel = self.connection.channel()
-                self.channel.queue_declare(queue=self.queue_name, durable=True)
-
             self.channel.basic_publish(exchange='', routing_key=self.queue_name, body=message)
         except pika.exceptions.AMQPConnectionError as e:
             raise MessageMiddlewareDisconnectedError(f"Error connecting to message broker: {str(e)}")
@@ -106,12 +100,6 @@ class MessageMiddlewareExchangeRabbitMQ(MessageMiddlewareExchange):
 
     def send(self, message):
         try:
-            if (self.connection is None or self.connection.is_closed or 
-                self.channel is None or self.channel.is_closed):
-                self.connection = pika.BlockingConnection(pika.ConnectionParameters(host=self.host))
-                self.channel = self.connection.channel()
-                self.channel.exchange_declare(exchange=self.exchange_name, exchange_type='topic', durable=True)
-
             for routing_key in self.routing_keys:
                 self.channel.basic_publish(exchange=self.exchange_name, routing_key=routing_key, body=message)
         except pika.exceptions.AMQPConnectionError as e:
